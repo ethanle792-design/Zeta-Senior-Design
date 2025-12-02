@@ -98,7 +98,6 @@ def open_sdr(args):
     chan = 0
     print("[SDR] Configuring RX...")
     sdr.setSampleRate(SOAPY_SDR_RX, chan, args.rate)
-    # freq will be set per-measurement (especially in sweep mode)
     sdr.setGain(SOAPY_SDR_RX, chan, args.gain)
 
     try:
@@ -112,7 +111,6 @@ def open_sdr(args):
     except Exception:
         pass
 
-    # Setup stream
     print("[SDR] Setting up RX stream...")
     stream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32, [chan])
     sdr.activateStream(stream)
@@ -136,23 +134,18 @@ def measure_power(sdr, stream, chan, freq_hz, nsamps, settle_time=0.02):
     """
     Tune to freq_hz, grab nsamps samples, and return average power in dBFS-ish.
     """
-    # Tune
     sdr.setFrequency(SOAPY_SDR_RX, chan, freq_hz)
     time.sleep(settle_time)
 
     buf = np.empty(nsamps, dtype=np.complex64)
 
-    # Read a block
     sr = sdr.readStream(stream, [buf], nsamps, timeoutUs=int(1e6))
     if sr.ret <= 0:
-        # read failed, return sentinel
         return None
 
     samples = buf[:sr.ret]
-
-    # Compute power: mean(|x|^2), convert to dB
     power_lin = np.mean(np.abs(samples) ** 2)
-    power_db = 10 * np.log10(power_lin + 1e-20)  # avoid log(0)
+    power_db = 10 * np.log10(power_lin + 1e-20)
 
     return power_db
 
@@ -163,7 +156,6 @@ def setup_csv(path, append=False):
     writer = csv.writer(f)
 
     if not append or f.tell() == 0:
-        # Write header
         writer.writerow(["timestamp_iso", "freq_hz", "power_db",
                          "gps_lat", "gps_lon", "gps_alt"])
 
@@ -189,6 +181,7 @@ def run_fixed_mode(args, sdr, stream, chan, writer):
 
             writer.writerow([t, int(args.freq), power_db,
                              gps_lat, gps_lon, gps_alt])
+            writer.flush()
 
             time.sleep(args.interval)
 
@@ -198,4 +191,52 @@ def run_fixed_mode(args, sdr, stream, chan, writer):
 
 def run_sweep_mode(args, sdr, stream, chan, writer):
     print("[MODE] Sweep logging")
-    print(f"       Start: {args.f-start/1e6:.3f} MHz")  # this line will error: fixed below
+    print(f"       Start: {args.f_start/1e6:.3f} MHz")
+    print(f"       Stop:  {args.f_stop/1e6:.3f} MHz")
+    print(f"       Step:  {args.f_step/1e6:.3f} MHz")
+    freqs = np.arange(args.f_start, args.f_stop + args.f_step / 2, args.f_step)
+
+    try:
+        while True:
+            for f_hz in freqs:
+                t = datetime.utcnow().isoformat()
+                power_db = measure_power(sdr, stream, chan, f_hz,
+                                         args.nsamps, settle_time=args.sweep_delay)
+                gps_lat, gps_lon, gps_alt = get_gps_fix()
+
+                if power_db is None:
+                    print(f"{t}  freq={f_hz/1e6:.3f} MHz  power=READ_FAIL")
+                else:
+                    print(f"{t}  freq={f_hz/1e6:.3f} MHz  power={power_db:.2f} dB")
+
+                writer.writerow([t, int(f_hz), power_db,
+                                 gps_lat, gps_lon, gps_alt])
+                writer.flush()
+
+    except KeyboardInterrupt:
+        print("\n[MODE] Sweep mode stopped by user.")
+
+
+def main():
+    args = parse_args()
+
+    # Open CSV first
+    csv_file, writer = setup_csv(args.out, append=args.append)
+    print(f"[LOG] Writing to: {args.out}")
+
+    # Open SDR
+    sdr, stream, chan = open_sdr(args)
+
+    try:
+        if args.mode == "fixed":
+            run_fixed_mode(args, sdr, stream, chan, writer)
+        else:
+            run_sweep_mode(args, sdr, stream, chan, writer)
+    finally:
+        close_sdr(sdr, stream)
+        csv_file.close()
+        print("[CLEANUP] SDR and log file closed.")
+
+
+if __name__ == "__main__":
+    main()
