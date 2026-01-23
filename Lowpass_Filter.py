@@ -1,43 +1,43 @@
 import numpy as np
-from scipy.signal import firwin, lfilter
+from scipy.signal import firwin, filtfilt
 
-def lowpass_filter_iq(iq, fs, f_pass, f_stop, numtaps=101, window='hamming'):
-    """
-    Apply a low-pass FIR filter to IQ samples.
-
-    Parameters
-    ----------
-    iq : complex ndarray
-        Time-domain IQ samples
-    fs : float
-        Sampling rate (Hz)
-    f_pass : float
-        Passband edge frequency (Hz)
-    f_stop : float
-        Stopband edge frequency (Hz)
-    numtaps : int
-        Number of filter taps (larger = sharper transition)
-    window : str
-        Window type for FIR design
-
-    Returns
-    -------
-    iq_filtered : complex ndarray
-        Filtered IQ samples
-    """
-    # Normalized frequencies (0..1, 1 = Nyquist)
+def lowpass_filter_iq(iq, fs, f_pass, numtaps=101, window='hamming'):
     nyq = fs / 2
     f_pass_norm = f_pass / nyq
-    f_stop_norm = f_stop / nyq
+    
+    # Design taps
+    taps = firwin(numtaps, cutoff=f_pass_norm, window=window)
 
-    # Transition width = stopband - passband
-    # Design FIR filter
-    taps = firwin(numtaps, cutoff=f_pass_norm, window=window, pass_zero=True)
+    # filtfilt handles complex iq directly and ensures zero time-delay
+    # This is critical for accurate geolocation timing!
+    return filtfilt(taps, 1.0, iq)
 
-    # Apply filter to both I and Q separately
-    i_filtered = lfilter(taps, 1.0, np.real(iq))
-    q_filtered = lfilter(taps, 1.0, np.imag(iq))
+def ddc_shift(iq_samples, fs, offset_hz):
+    """
+    Shifts the target frequency to 0 Hz using complex mixing.
+    
+    Parameters:
+        iq_samples: Raw complex64 array
+        fs: Sampling rate (e.g., 3e6)
+        offset_hz: Target Freq - Center Freq (e.g., -400e3)
+    """
+    # Create time vector normalized to fs for floating point precision
+    t = np.arange(len(iq_samples)) / fs
+    
+    # Generate the mixer (complex exponential)
+    # Multiplying by -offset_hz "un-spins" the target back to 0 Hz
+    mixer = np.exp(-1j * 2 * np.pi * offset_hz * t)
+    
+    return iq_samples * mixer
 
-    iq_filtered = i_filtered + 1j * q_filtered
-
-    return iq_filtered
+def decimate(iq, fs, M=10):
+    # Keep every M-th sample
+    decimated_iq = iq[::M]
+    new_fs = fs / M
+    # Debug print to console so you see it working
+    # print(f"--- Decimation Report ---")
+    # print(f"Input Samples:  {len(iq)}")
+    # print(f"Output Samples: {len(decimated_iq)} (Factor of {M})")
+    # print(f"New Sample Rate: {new_fs/1e3} kHz")
+    
+    return decimated_iq, new_fs

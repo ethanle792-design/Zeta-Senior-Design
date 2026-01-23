@@ -1,14 +1,32 @@
 import numpy as np
 import scipy.signal as signal
 
-def matched_filter(chirp, rx_signal, normalize=False):
+def generate_lora_chirp(sf, bw, fs):
+    """
+    Generates a standard LoRa 'Upchirp' in the time domain.
+    """
+    # Calculate duration of one symbol
+    duration = (2**sf) / bw
+    
+    # Create time array
+    num_samples = int(duration * fs)
+    t = np.arange(num_samples) / fs
+    
+    # Linear Chirp Math: exp(j * pi * (bw/T) * t^2)
+    # This sweeps from 0 to BW. To center it (-BW/2 to +BW/2), 
+    # For a standard LoRa upchirp centered at baseband:
+    k = bw / duration
+    chirp = np.exp(1j * 2 * np.pi * ((-bw/2) * t + 0.5 * k * t**2))
+    
+    return chirp
+
+def matched_filter(chirp, rx_signal, normalize=True):
     """
     Fast Matched Filter using FFT convolution.
     
     Args:
         chirp: LoRa chirp template (Complex IQ)
         rx_signal: Received signal (Complex IQ)
-        normalize: Set to FALSE for Direction Finding!
     """
     # 1. Create the Matched Filter Template
     # Conjugate and Time-Reverse the chirp
@@ -34,19 +52,6 @@ def matched_filter(chirp, rx_signal, normalize=False):
         corr /= max_val
         
     return corr
-
-# ==========================================
-# Usage for Direction Finding
-# ==========================================
-# 1. Measure Angle 0
-# correlation = matched_filter(my_chirp, rx_at_angle_0, normalize=False)
-# strength_0 = np.max(np.abs(correlation))
-
-# 2. Measure Angle 10
-# correlation = matched_filter(my_chirp, rx_at_angle_10, normalize=False)
-# strength_10 = np.max(np.abs(correlation))
-
-# Compare: if strength_0 > strength_10, direction is closer to 0.
 
 def extract_corr_regions(corr, threshold):
     """
@@ -77,25 +82,4 @@ def extract_corr_regions(corr, threshold):
     regions = list(zip(starts, stops))
     return regions
 
-# ==========================================
-# 1. Helper: Generate the "Ideal" Chirp Template
-# ==========================================
-def generate_lora_chirp(sf, bw, fs):
-    """
-    Generates a standard LoRa 'Upchirp' in the time domain.
-    """
-    # Calculate duration of one symbol
-    duration = (2**sf) / bw
-    
-    # Create time array
-    num_samples = int(duration * fs)
-    t = np.arange(num_samples) / fs
-    
-    # Linear Chirp Math: exp(j * pi * (bw/T) * t^2)
-    # This sweeps from 0 to BW. To center it (-BW/2 to +BW/2), 
-    # we usually shift frequency or just use this baseband sweep.
-    # For a standard LoRa upchirp centered at baseband:
-    k = bw / duration
-    chirp = np.exp(1j * 2 * np.pi * ((-bw/2) * t + 0.5 * k * t**2))
-    
-    return chirp
+

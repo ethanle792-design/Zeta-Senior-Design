@@ -1,117 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def load_iq(
-    filepath,
-    dtype="int16",
-    swap_iq=False,
-    normalize=True,
-    remove_dc=False
-):
-    """
-    Load IQ samples from a raw SDR IQ file.
-
-    Parameters
-    ----------
-    filepath : str
-        Path to IQ file (e.g. ".c64", ".iq", etc.)
-    dtype : str
-        "int16" or "float32"
-    swap_iq : bool
-        Swap I and Q channels if needed
-    normalize : bool
-        Normalize int16 to [-1,1]
-    remove_dc : bool
-        Subtract mean to remove DC offset / LO leakage
-
-    Returns
-    -------
-    iq : complex ndarray
-        Baseband IQ samples
-    """
-
-    dtype = dtype.lower()
-
-    # -------------------------
-    # Float32 IQ format
-    # -------------------------
-    if dtype == "float32":
-        raw = np.fromfile(filepath, dtype=np.float32)
-
-        I = raw[0::2]
-        Q = raw[1::2]
-
-        if swap_iq:
-            I, Q = Q, I
-
-        iq = I + 1j * Q
-
-    # -------------------------
-    # Int16 IQ format (RTL-SDR default)
-    # -------------------------
-    elif dtype == "int16":
-        raw = np.fromfile(filepath, dtype=np.int16)
-
-        I = raw[0::2].astype(np.float32)
-        Q = raw[1::2].astype(np.float32)
-
-        if swap_iq:
-            I, Q = Q, I
-
-        iq = I + 1j * Q
-
-        if normalize:
-            iq /= 32768.0
-
-    else:
-        raise ValueError("dtype must be 'int16' or 'float32'")
-
-    # -------------------------
-    # Remove DC spike
-    # -------------------------
-    if remove_dc:
-        iq -= np.mean(iq)
-
-    return iq
-
-import numpy as np
-import scipy.signal as signal
-import matplotlib.pyplot as plt
-
-def extract_offset_signal(iq_samples, sample_rate, beacon_offset_hz, bw_hz):
-    """
-    Shifts a specific offset frequency to 0 Hz and filters it.
-    
-    Parameters:
-        beacon_offset_hz: Where the beacon is relative to center (e.g., +500e3)
-        bw_hz: The bandwidth to keep (e.g., 125e3)
-    """
-    
-    # 1. Generate the Mixing Signal (Complex Sine Wave)
-    # We want to shift by -offset to bring it to 0
-    t = np.arange(len(iq_samples))
-    mixer = np.exp(-1j * 2 * np.pi * (beacon_offset_hz / sample_rate) * t)
-    
-    # 2. Mix (Shift the spectrum)
-    shifted_iq = iq_samples * mixer
-    
-    # 3. Design Lowpass Filter
-    # Now that signal is at 0, we just need a lowpass for half the BW
-    cutoff = bw_hz / 2
-    num_taps = 101
-    taps = signal.firwin(num_taps, cutoff / (sample_rate/2), window='hamming')
-    
-    # # 4. Filter
-    # filtered_iq = signal.lfilter(taps, 1.0, shifted_iq)
-    
-    # return filtered_iq
-    return shifted_iq
-
-# Usage Example:
-# SDR tuned to 915.0 MHz. Beacon is at 915.5 MHz.
-# offset = 500e3 (500 kHz)
-# clean_signal = extract_offset_signal(raw_iq, 2e6, 500e3, 125e3)
-
 def view_iq_time(iq, fs, num_samples):
     """
     Plot raw IQ samples in time domain.
@@ -138,3 +27,58 @@ def view_iq_time(iq, fs, num_samples):
     plt.legend()
     plt.grid(True)
     plt.show()
+    
+
+
+def plot_debug_spectrum(iq, fs, center_freq, title="Spectrum Analysis", chunk_size=1e6  ):
+    """
+    Plots the PSD of a chunk of IQ data with a centered RF axis.
+    
+    Parameters:
+        iq: Complex IQ samples
+        fs: Sample rate (Hz)
+        center_freq: The RF frequency that '0 Hz' represents (Hz)
+        title: Title for the plot
+        chunk_size: Number of samples to FFT (prevents memory crash)
+    """
+    # 1. Take a manageable chunk from the middle of the data
+    # (Middle is usually more stable than the very beginning of a recording)
+    # Ensure start and end are forced to integers
+    start = int(len(iq) // 2)
+    end = int(start + chunk_size)
+    
+    # Now this slice will work every time
+    data_chunk = iq[start:end]
+    
+    # 2. Perform FFT
+    # Use a Window to prevent spectral leakage (makes the CW spike sharper)
+    window = np.blackman(len(data_chunk))
+    fft_data = np.fft.fftshift(np.fft.fft(data_chunk * window))
+    
+    # 3. Create Frequency Axis
+    freq_bins = np.fft.fftshift(np.fft.fftfreq(len(data_chunk), 1/fs))
+    freq_axis_mhz = (freq_bins + center_freq) / 1e6
+    
+    # 4. Calculate Magnitude in dB
+    # We normalize to the peak (0 dB) so it's easy to see the SNR
+    mag_db = 20 * np.log10(np.abs(fft_data) + 1e-12)
+    mag_db -= np.max(mag_db)
+    
+    # 5. Plotting
+    plt.figure(figsize=(12, 5))
+    plt.plot(freq_axis_mhz, mag_db, color='tab:blue', linewidth=1)
+    
+    # Add Marker for the "Logical Center"
+    plt.axvline(center_freq/1e6, color='red', linestyle='--', alpha=0.5, label='Center/LO')
+    
+    plt.title(title)
+    plt.xlabel("Frequency (MHz)")
+    plt.ylabel("Relative Magnitude (dB)")
+    plt.grid(True, which='both', alpha=0.3)
+    plt.ylim(-80, 5) # Show 80dB of dynamic range
+    plt.legend()
+    plt.show()
+
+    # Find and print the peak frequency for the console
+    peak_idx = np.argmax(mag_db)
+    print(f"[{title}] Peak found at: {freq_axis_mhz[peak_idx]:.6f} MHz")
