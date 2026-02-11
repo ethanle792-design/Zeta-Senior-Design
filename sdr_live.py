@@ -96,7 +96,7 @@ def main():
     line, = ax.plot(freqs, np.full(args.fft, -100.0))
     ax.set_xlabel("Offset from center (MHz)")
     ax.set_ylabel("Power (dB)")
-    ax.set_ylim(-120, 20)
+    ax.set_ylim(-100, 80)
     ax.set_xlim(freqs[0], freqs[-1])
     ax.grid(True)
     ax.set_title(f"LimeSDR Live Spectrum @ {actual_freq/1e6:.3f} MHz")
@@ -125,17 +125,56 @@ def main():
     # ---------------------------------------------------------------
     print("[5] Entering live loop (Ctrl+C to quit)...")
     buf = np.empty(args.fft, dtype=np.complex64)
+    fail_count = 0  # track consecutive read failures
 
     try:
         while True:
-            sr = sdr.readStream(
-                stream, [buf], args.fft, timeoutUs=int(1e6)
-            )
+            sr = sdr.readStream(stream, [buf], args.fft, timeoutUs=int(1e6))
+
+            # -----------------------------
+            # Handle read failures clearly
+            # -----------------------------
             if sr.ret <= 0:
-                print(f"readStream ret={sr.ret}, continuing...")
+                fail_count += 1
+                print(f"readStream ret={sr.ret} (failure #{fail_count})")
+
+                # Visually show "no data" instead of freezing old frame
+                empty_line = np.full_like(freqs, -120.0, dtype=float)
+                line.set_ydata(empty_line)
+
+                if args.waterfall:
+                    wf_data[:-1] = wf_data[1:]      # scroll up
+                    wf_data[-1] = empty_line        # last row = no data
+                    wf_im.set_data(wf_data)
+
+                fig.canvas.draw()
+                fig.canvas.flush_events()
+                plt.pause(0.01)
+
+                # After too many failures, try restarting the stream
+                if fail_count >= 10:
+                    print("[WARN] Too many read failures, restarting stream...")
+                    try:
+                        sdr.deactivateStream(stream)
+                    except Exception:
+                        pass
+                    try:
+                        sdr.closeStream(stream)
+                    except Exception:
+                        pass
+
+                    stream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32, [chan])
+                    sdr.activateStream(stream)
+                    fail_count = 0
+
                 continue
 
+            # If we got here, we have good data
+            fail_count = 0
             samples = buf[:sr.ret]
+
+            # Optional: DC removal so center spur is smaller
+            # samples = samples - np.mean(samples)
 
             # Window + FFT
             window = np.hanning(len(samples))

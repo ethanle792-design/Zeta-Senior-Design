@@ -101,6 +101,12 @@ def open_sdr(args):
     sdr.setGain(SOAPY_SDR_RX, chan, args.gain)
 
     try:
+        sdr.setFrequency(SOAPY_SDR_RX, chan, args.freq)
+        print(f"[SDR] Center frequency set to {args.freq/1e6:.3f} MHz")
+    except Exception as e:
+        raise RuntimeError(f"Failed to set initial frequency: {e}")
+
+    try:
         sdr.setAntenna(SOAPY_SDR_RX, chan, args.antenna)
         print(f"[SDR] Using antenna: {args.antenna}")
     except Exception as e:
@@ -130,17 +136,30 @@ def close_sdr(sdr, stream):
         pass
 
 
-def measure_power(sdr, stream, chan, freq_hz, nsamps, settle_time=0.02):
+def measure_power(sdr, stream, chan, nsamps, settle_time=0.02, freq_hz=None):
     """
-    Tune to freq_hz, grab nsamps samples, and return average power in dBFS-ish.
+    Optionally tune to freq_hz, grab nsamps samples, and return average power in dBFS-ish.
+    If freq_hz is None, skip retuning (useful for fixed mode).
     """
-    sdr.setFrequency(SOAPY_SDR_RX, chan, freq_hz)
-    time.sleep(settle_time)
+    # Optional tuning
+    if freq_hz is not None:
+        try:
+            sdr.setFrequency(SOAPY_SDR_RX, chan, freq_hz)
+        except Exception as e:
+            print(f"[SDR] setFrequency({freq_hz/1e6:.3f} MHz) failed: {e}")
+            return None
+        time.sleep(settle_time)
 
     buf = np.empty(nsamps, dtype=np.complex64)
 
-    sr = sdr.readStream(stream, [buf], nsamps, timeoutUs=int(1e6))
+    try:
+        sr = sdr.readStream(stream, [buf], nsamps, timeoutUs=int(1e6))
+    except Exception as e:
+        print(f"[SDR] readStream failed: {e}")
+        return None
+
     if sr.ret <= 0:
+        print(f"[SDR] readStream returned {sr.ret}")
         return None
 
     samples = buf[:sr.ret]
@@ -148,7 +167,6 @@ def measure_power(sdr, stream, chan, freq_hz, nsamps, settle_time=0.02):
     power_db = 10 * np.log10(power_lin + 1e-20)
 
     return power_db
-
 
 def setup_csv(path, append=False):
     mode = "a" if append else "w"
@@ -162,7 +180,7 @@ def setup_csv(path, append=False):
     return f, writer
 
 
-def run_fixed_mode(args, sdr, stream, chan, writer):
+def run_fixed_mode(args, sdr, stream, chan, writer, csv_file):
     print("[MODE] Fixed frequency logging")
     print(f"       Center freq: {args.freq/1e6:.3f} MHz")
     print(f"       Interval:    {args.interval:.2f} s")
@@ -170,8 +188,8 @@ def run_fixed_mode(args, sdr, stream, chan, writer):
     try:
         while True:
             t = datetime.utcnow().isoformat()
-            power_db = measure_power(sdr, stream, chan, args.freq,
-                                     args.nsamps, settle_time=0.0)
+            power_db = measure_power(sdr, stream, chan, nsamps=args.nsamps, 
+                                     settle_time=0.0, freq_hz=None)
             gps_lat, gps_lon, gps_alt = get_gps_fix()
 
             if power_db is None:
@@ -181,7 +199,7 @@ def run_fixed_mode(args, sdr, stream, chan, writer):
 
             writer.writerow([t, int(args.freq), power_db,
                              gps_lat, gps_lon, gps_alt])
-            writer.flush()
+            csv_file.flush()
 
             time.sleep(args.interval)
 
@@ -189,7 +207,7 @@ def run_fixed_mode(args, sdr, stream, chan, writer):
         print("\n[MODE] Fixed mode stopped by user.")
 
 
-def run_sweep_mode(args, sdr, stream, chan, writer):
+def run_sweep_mode(args, sdr, stream, chan, writer, csv_file):
     print("[MODE] Sweep logging")
     print(f"       Start: {args.f_start/1e6:.3f} MHz")
     print(f"       Stop:  {args.f_stop/1e6:.3f} MHz")
@@ -201,7 +219,8 @@ def run_sweep_mode(args, sdr, stream, chan, writer):
             for f_hz in freqs:
                 t = datetime.utcnow().isoformat()
                 power_db = measure_power(sdr, stream, chan, f_hz,
-                                         args.nsamps, settle_time=args.sweep_delay)
+                                         args.nsamps, settle_time=args.sweep_delay,
+                                         freq_hz=f_hz)
                 gps_lat, gps_lon, gps_alt = get_gps_fix()
 
                 if power_db is None:
@@ -211,7 +230,7 @@ def run_sweep_mode(args, sdr, stream, chan, writer):
 
                 writer.writerow([t, int(f_hz), power_db,
                                  gps_lat, gps_lon, gps_alt])
-                writer.flush()
+                csv_file.flush()
 
     except KeyboardInterrupt:
         print("\n[MODE] Sweep mode stopped by user.")
@@ -229,9 +248,9 @@ def main():
 
     try:
         if args.mode == "fixed":
-            run_fixed_mode(args, sdr, stream, chan, writer)
+            run_fixed_mode(args, sdr, stream, chan, writer, csv_file)
         else:
-            run_sweep_mode(args, sdr, stream, chan, writer)
+            run_sweep_mode(args, sdr, stream, chan, writer, csv)
     finally:
         close_sdr(sdr, stream)
         csv_file.close()
