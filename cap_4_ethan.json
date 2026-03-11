@@ -1,0 +1,66 @@
+{
+  "base": "cap_4_ethan",
+  "file_cf32": "cap_4_ethan.cf32",
+  "format": "cf32",
+  "dtype": "complex64",
+  "device_args": "driver=bladerf",
+  "rx_channel": 0,
+  "requested": {
+    "freq_hz": 915400000.0,
+    "rate_sps": 600000.0,
+    "gain_db": 30.0,
+    "bandwidth_hz": null,
+    "duration_s": 3.0,
+    "samples": null,
+    "block_samples": 262144,
+    "timeout_us": 250000
+  },
+  "actual": {
+    "freq_hz": 915399998.0,
+    "rate_sps": 600000.0,
+    "bandwidth_hz": 18000000.0,
+    "gain_db": 60.0
+  },
+  "timing": {
+    "start_utc": "2026-03-10T21:45:33.204531+00:00",
+    "end_utc": "2026-03-10T21:45:36.206747+00:00",
+    "elapsed_s": 3.0022518634796143,
+    "t0_monotonic": 114.172317937
+  },
+  "stats": {
+    "samples_written": 1800000,
+    "complex_samples_target": 1800000,
+    "timeouts": 0,
+    "overruns": 0,
+    "read_errors": 2
+  },
+  "tag": null,
+  "sensors": {
+    "compass": {
+      "enabled": true,
+      "bus": 7,
+      "addr": "0x2c",
+      "hz": 30,
+      "alpha": 0.7,
+      "calibration": {
+        "x_offset": 149.0,
+        "y_offset": -1451.5,
+        "x_scale": 1.026869,
+        "y_scale": 0.974501
+      },
+      "heading_csv": "cap_4_ethan_heading.csv",
+      "last_heading_deg": 30.040142826187022,
+      "last_status": "st=0x80"
+    },
+    "gps": {
+      "lat": null,
+      "lon": null,
+      "alt_m": null,
+      "fix": null
+    }
+  },
+  "notes": [
+    "Raw IQ is complex64 interleaved (I+jQ) at the given sample rate.",
+    "Compass CSV timestamps are relative to capture start monotonic time (t_rel_s)."
+  ]
+}
