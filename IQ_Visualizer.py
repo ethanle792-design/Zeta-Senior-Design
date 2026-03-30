@@ -22,31 +22,59 @@ class IQDataManager:
     def __init__(self, metadata):
         self.meta = metadata
         # Accessing actual rate from your JSON structure
-        self.fs = metadata['actual']['rate_sps']
-        self.start_time = metadata['timing']['t0_monotonic']
+        self.fs = metadata.get('rate')  # was metadata['actual']['rate_sps']
+        self.fc = metadata.get('freq')  # was metadata['actual']['freq_hz']
 
-    def load_iq(self, file_path, format_type='cf32'):
-        if format_type == 'cf32':
-            return np.fromfile(file_path, dtype=np.complex64)
-        elif format_type == 'cs16':
-            raw = np.fromfile(file_path, dtype=np.int16)
-            float_data = raw.astype(np.float32) / 32768.0
-            return float_data[0::2] + 1j * float_data[1::2]
+    def load_iq(self, filename, format_type='cf32'):
+        """
+        Loads IQ data and normalizes it to a float range of -1.0 to 1.0.
+        Handles both bladeRF (cs16) and standard (cf32) formats.
+        """
+        if format_type == 'cs16':
+            # bladeRF / HackRF int16 format
+            # Layout: I, Q, I, Q ... as signed 16-bit integers
+            raw = np.fromfile(filename, dtype=np.int16)
+            # Convert to float and normalize by max int16 value
+            # This ensures the LoRaDetector sees the same 'amplitude' scale as cf32
+            raw = raw.astype(np.float32) / 32768.0
+            iq = raw[0::2] + 1j * raw[1::2]
+            print(f"[*] Loaded CS16 data: {len(iq)} complex samples.")
+            
         else:
-            raise ValueError("Format must be 'cf32' or 'cs16'")
+            # Standard complex float 32-bit format
+            iq = np.fromfile(filename, dtype=np.complex64)
+            print(f"[*] Loaded CF32 data: {len(iq)} complex samples.")
+            
+        return iq
 
     def sync_sensors(self, compass_csv, num_iq_samples, delay_offset=0.0):
+        """
+        Maps 'heading' from CSV to IQ sample indices using the 't' column.
+        """
+        import pandas as pd
         df = pd.read_csv(compass_csv)
-        df['t_sync'] = df['t_rel_s'] + delay_offset
         
+        # Clean whitespace and identify columns
+        df.columns = df.columns.str.strip()
+        
+        # Mapping for your specific CSV structure
+        time_col = 't' 
+        heading_col = 'heading'
+
+        if time_col not in df.columns:
+            raise KeyError(f"Expected column '{time_col}' not found. Columns: {df.columns.tolist()}")
+
+        # Apply the preset offset
+        df['t_sync'] = df[time_col] + delay_offset
+        
+        # Create a time vector for the loaded IQ data
         iq_times = np.arange(num_iq_samples) / self.fs
         
-        # Use 'side=left' and clip to ensure we stay within valid CSV indices
-        indices = np.searchsorted(df['t_sync'], iq_times, side='left') - 1
+        # Zero-Order Hold: Find the closest heading for every IQ sample
+        indices = np.searchsorted(df['t_sync'], iq_times, side='right') - 1
         indices = np.clip(indices, 0, len(df) - 1)
         
-        # Explicitly return as a numpy array of floats
-        return df['heading_deg'].values[indices].astype(np.float32)
+        return df[heading_col].values[indices].astype(np.float32)
     
 import matplotlib.pyplot as plt
 import numpy as np

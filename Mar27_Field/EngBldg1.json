@@ -1,0 +1,14 @@
+{
+  "IQ_file": "EngBldg1.cs16",
+  "heading_file": "EngBldg1_heading.csv",
+  "duration_s": 12.0,
+  "requested_samples": null,
+  "gps": null,
+  "log_delta_ns": 12432224,
+  "samples": 7200000,
+  "rate": 600000.0,
+  "freq": 915400000.0,
+  "heading_final": 120.89811716491334,
+  "compass_enabled": true,
+  "heading_correction_deg": -90
+}

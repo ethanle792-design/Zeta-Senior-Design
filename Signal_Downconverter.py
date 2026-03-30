@@ -37,19 +37,12 @@ class SignalDownConverter:
         return filtfilt(taps, 1.0, iq)
 
     def decimate(self, iq, factor=10):
-        """
-        Reduces the sample rate by keeping every M-th sample.
-        
-        Returns:
-            decimated_iq (np.array): The downsampled signal.
-            new_fs (float): The updated sample rate.
-        """
+        if factor <= 1:
+            return iq, self.fs
+            
         decimated_iq = iq[::factor]
         new_fs = self.fs / factor
-        
-        # Update internal state so subsequent operations use the new rate
-        self.fs = new_fs
-        
+        # DO NOT update self.fs here, just return the new value
         return decimated_iq, new_fs
 
     def process_pipeline(self, iq, offset_hz, bw_target, decimation_factor):
@@ -57,6 +50,7 @@ class SignalDownConverter:
         A helper to run a full DDC chain: Shift -> Filter -> Decimate.
         """
         # 1. Shift target to 0 Hz
+        print(f"DEBUG: Filtering with fs={self.fs}, bw_target={bw_target}")
         iq = self.shift_to_baseband(iq, offset_hz)
         
         # 2. Filter out everything except the target bandwidth

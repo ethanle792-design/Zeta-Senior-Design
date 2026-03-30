@@ -1,0 +1,14 @@
+{
+  "IQ_file": "Site1_spin.cs16",
+  "heading_file": "Site1_spin_heading.csv",
+  "duration_s": 12.0,
+  "requested_samples": null,
+  "gps": null,
+  "log_delta_ns": 12412576,
+  "samples": 7200000,
+  "rate": 600000.0,
+  "freq": 915400000.0,
+  "heading_final": 261.99509174121124,
+  "compass_enabled": true,
+  "heading_correction_deg": -90
+}
