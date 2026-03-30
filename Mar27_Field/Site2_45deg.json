@@ -1,0 +1,14 @@
+{
+  "IQ_file": "Site2_45deg.cs16",
+  "heading_file": "Site2_45deg_heading.csv",
+  "duration_s": 3.0,
+  "requested_samples": null,
+  "gps": null,
+  "log_delta_ns": 12158464,
+  "samples": 1800000,
+  "rate": 600000.0,
+  "freq": 915400000.0,
+  "heading_final": 209.65412640292638,
+  "compass_enabled": true,
+  "heading_correction_deg": -90
+}
