@@ -1,0 +1,27 @@
+# Raw SDR / IQ capture data
+*.cf32
+*.cs16
+*.sc16
+*.c64
+*.iq
+*.bin
+
+# Field-test metadata/log output
+*_heading.csv
+spin_capture_*.json
+capture_*.json
+*_cli.txt
+
+# Test/field data folders
+**/tests/
+**/Tests/
+**/field_tests/
+**/Field Tests/
+**/captures/
+**/raw_data/
+**/data/raw/
+**/data/captures/
+
+# OS junk
+.DS_Store
+Thumbs.db

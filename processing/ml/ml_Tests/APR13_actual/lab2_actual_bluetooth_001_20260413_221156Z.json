@@ -1,0 +1,31 @@
+{
+  "file": "lab2_actual_bluetooth_001_20260413_221156Z.sc16",
+  "format": "sc16_bin",
+  "dtype": "int16 interleaved IQ",
+  "band": "bluetooth",
+  "round": 1,
+  "rx_channel": 1,
+  "requested": {
+    "freq_hz": 2441000000.0,
+    "rate_sps": 25000000.0,
+    "bandwidth_hz": 25000000.0,
+    "gain_db": 20.0,
+    "duration_s": 10.0,
+    "samples": 250000000
+  },
+  "stats": {
+    "file_size_bytes": 1000000000,
+    "expected_bytes": 1000000000,
+    "approx_complex_samples_written": 250000000,
+    "complete_capture": true,
+    "bladeRF_cli_returncode": 0
+  },
+  "artifacts": {
+    "cli_log": "lab2_actual_bluetooth_001_20260413_221156Z_cli.txt"
+  },
+  "notes": [
+    "Captured via bladeRF-cli using rx config format=bin.",
+    "Each complex sample is 4 bytes: int16 I followed by int16 Q.",
+    "This avoids the SoapySDR RX1 dual-stream issue."
+  ]
+}
