@@ -1,0 +1,66 @@
+{
+  "base": "rec_test",
+  "file_cf32": "rec_test.cf32",
+  "format": "cf32",
+  "dtype": "complex64",
+  "device_args": "driver=bladerf",
+  "rx_channel": 0,
+  "requested": {
+    "freq_hz": 915400000.0,
+    "rate_sps": 600000.0,
+    "gain_db": 30.0,
+    "bandwidth_hz": null,
+    "duration_s": 12.0,
+    "samples": null,
+    "block_samples": 262144,
+    "timeout_us": 250000
+  },
+  "actual": {
+    "freq_hz": 915399998.0,
+    "rate_sps": 600000.0,
+    "bandwidth_hz": 18000000.0,
+    "gain_db": 60.0
+  },
+  "timing": {
+    "start_utc": "2026-02-27T01:25:14.488491+00:00",
+    "end_utc": "2026-02-27T01:25:26.524751+00:00",
+    "elapsed_s": 12.036288738250732,
+    "t0_monotonic": 1037.656153056
+  },
+  "stats": {
+    "samples_written": 7200000,
+    "complex_samples_target": 7200000,
+    "timeouts": 0,
+    "overruns": 0,
+    "read_errors": 2
+  },
+  "tag": null,
+  "sensors": {
+    "compass": {
+      "enabled": true,
+      "bus": 7,
+      "addr": "0x2c",
+      "hz": 30.0,
+      "alpha": 0.7,
+      "calibration": {
+        "x_offset": 149.0,
+        "y_offset": -1451.5,
+        "x_scale": 1.026869,
+        "y_scale": 0.974501
+      },
+      "heading_csv": "rec_test_heading.csv",
+      "last_heading_deg": null,
+      "last_status": "ERR:[Errno 121] Remote I/O error"
+    },
+    "gps": {
+      "lat": null,
+      "lon": null,
+      "alt_m": null,
+      "fix": null
+    }
+  },
+  "notes": [
+    "Raw IQ is complex64 interleaved (I+jQ) at the given sample rate.",
+    "Compass CSV timestamps are relative to capture start monotonic time (t_rel_s)."
+  ]
+}

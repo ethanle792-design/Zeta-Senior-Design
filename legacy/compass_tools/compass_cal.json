@@ -1,0 +1,11 @@
+{
+  "bus": 7,
+  "addr": "0x2c",
+  "x_offset": 55.5,
+  "y_offset": -1403.5,
+  "x_scale": 1.004128,
+  "y_scale": 0.995906,
+  "heading_offset_deg": 0.0,
+  "smoothing_alpha": 0.7,
+  "flip_y": true
+}
