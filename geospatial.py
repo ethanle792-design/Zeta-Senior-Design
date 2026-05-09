@@ -71,6 +71,14 @@ class SignalMapper:
         """Renders heatmap with centroid-to-true-loc line and distance."""
         plot_heatmap(self.grid, self.meta, drone_path=self.drone_path_m)
         ax = plt.gca()
+        
+        # --- ADD THIS PART ---
+        if self.drone_path_m:
+            # Unzip the (dx, dy) tuples into two lists for plotting
+            path_x, path_y = zip(*self.drone_path_m)
+            ax.scatter(path_x, path_y, c='orange', s=30, label='Measurement Points', 
+                       edgecolors='black', zorder=10)
+        # ---------------------
 
         # 1. Get Confidence Data
         conf_data = self.get_confidence_data()
@@ -78,13 +86,13 @@ class SignalMapper:
 
         if conf_data:
             # Draw Bounding Box
-            rect = patches.Rectangle(
-                (conf_data['min_x'], conf_data['min_y']), 
-                conf_data['width'], conf_data['height'],
-                linewidth=2, edgecolor='cyan', facecolor='none', 
-                label=f'Confidence Zone', zorder=5
-            )
-            ax.add_patch(rect)
+            # rect = patches.Rectangle(
+            #     (conf_data['min_x'], conf_data['min_y']), 
+            #     conf_data['width'], conf_data['height'],
+            #     linewidth=2, edgecolor='cyan', facecolor='none', 
+            #     label=f'Confidence Zone', zorder=5
+            # )
+            # ax.add_patch(rect)
             
             # Plot Centroid (Center of the zone)
             centroid_m = conf_data['centroid']
