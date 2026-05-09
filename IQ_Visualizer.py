@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import json
 import os
 import pandas as pd
+from scipy.stats import kurtosis
 
 def extract_capture_metadata(json_path):
     """
@@ -17,6 +18,96 @@ def extract_capture_metadata(json_path):
     # We return the whole 'data' dict or a structured version.
     # Let's keep the structure but ensure 'timing' is accessible.
     return data 
+
+def plot_signal_quality(iq, fs, symbol_len, step=None):
+    """
+    Plots the Magnitude vs. Quality Score (Q = mean/std) over time.
+    
+    iq: Complex IQ data
+    fs: Sample rate
+    symbol_len: Number of samples in one LoRa chirp
+    step: How often to calculate Q (default is 1/4 of a symbol for smoothness)
+    """
+    if step is None:
+        step = symbol_len // 4
+        
+    mag = np.abs(iq)
+    time_axis = np.arange(len(mag)) / fs
+    
+    # Calculate sliding window Quality Score
+    qualities = []
+    quality_times = []
+    
+    for i in range(0, len(mag) - symbol_len, step):
+        window = mag[i : i + symbol_len]
+        mu = np.mean(window)
+        sigma = np.std(window)
+        
+        # Q = Mean / StdDev. 
+        # A clean ring (mu=1, sigma=small) results in a HIGH Q.
+        # Two rings/smearing (high sigma) results in a LOW Q.
+        q_score = mu / (sigma + 1e-6)
+        
+        qualities.append(q_score)
+        quality_times.append(time_axis[i + symbol_len // 2])
+
+    # Plotting
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+    
+    # Subplot 1: Raw Magnitude
+    ax1.plot(time_axis, mag, alpha=0.5, label='Magnitude')
+    ax1.set_ylabel('Absolute Magnitude')
+    ax1.set_title('BANSHEE Signal Analysis: Power vs. Quality')
+    ax1.grid(True, alpha=0.3)
+    
+    # Subplot 2: Quality Score
+    ax2.plot(quality_times, qualities, color='orange', lw=2, label='Quality Score (Q)')
+    ax2.axhline(y=1.41, color='red', linestyle='--', label='Theoretical Max (Clean Chirp)')
+    ax2.set_ylabel('Quality Score (mu/sigma)')
+    ax2.set_xlabel('Time (seconds)')
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.show()
+
+# Example usage for your BANSHEE rig:
+# plot_signal_quality(iq_bb, fs_bb, detector.num_samples_per_symbol)
+
+
+
+def calculate_iq_weight(iq_data):
+    """
+    Specifically rewards constellations with a 'Bright Center' and 'Faint Ring'.
+    File 4 will now score the highest.
+    """
+    mags = np.abs(iq_data)
+    if np.max(mags) == 0: return 0
+    
+    # 1. Define the 'Center' and the 'Ring' zones
+    # We define the 'Center' as the inner 15% of the magnitude range
+    center_mask = mags < (0.15 * np.max(mags))
+    center_count = np.sum(center_mask)
+    ring_count = np.sum(~center_mask)
+    
+    if ring_count == 0: return 0
+
+    # 2. Calculate Central Density Ratio
+    # This rewards having WAY more samples at the origin than on the ring.
+    # File 4 has a massive center_count and a tiny ring_count.
+    density_ratio = center_count / ring_count
+    
+    # 3. Cleanliness Factor (Ring Thickness)
+    # We want the ring samples to have very low variance (a thin line)
+    ring_mags = mags[~center_mask]
+    ring_thickness = np.std(ring_mags) / (np.mean(ring_mags) + 1e-9)
+    
+    # 4. Final Weight
+    # We reward high center density and PUNISH a thick/blurry ring
+    weight = (density_ratio) / (1.0 + ring_thickness)
+    
+    # Normalize to keep numbers manageable (Optional)
+    return np.log1p(weight)
 
 class IQDataManager:
     def __init__(self, metadata):
@@ -76,12 +167,6 @@ class IQDataManager:
         
         return df[heading_col].values[indices].astype(np.float32)
     
-import matplotlib.pyplot as plt
-import numpy as np
-
-import matplotlib.pyplot as plt
-import numpy as np
-
 class IQVisualizer:
     def __init__(self, debug_mode=False):
         self.debug_mode = debug_mode
@@ -115,11 +200,13 @@ class IQVisualizer:
         plt.draw()
         plt.pause(0.1) # Small pause to let the OS draw the window
 
-    def plot_time(self, iq, fs, num_samples=50000, title="Time Domain"):
+    def plot_time(self, iq, fs, time_start=0, time_end=1, title="Time Domain"):
         if not self.debug_mode: return
         
+        num_samples_start = int(time_start * fs)
+        num_samples_end = int(time_end * fs)
         plt.figure(title, figsize=(10, 4))
-        iq_p = iq[:num_samples]
+        iq_p = iq[num_samples_start:num_samples_end]
         t = np.arange(len(iq_p)) / fs
 
         plt.plot(t * 1e3, iq_p.real, label='I', alpha=0.7)
@@ -148,3 +235,49 @@ class IQVisualizer:
         plt.title(title)
         plt.xlabel("Seconds")
         plt.show() # This final call keeps ALL windows open
+        
+    def plot_constellation(self, iq):
+        # Assuming 'iq' is your numpy array of complex numbers
+        plt.figure(figsize=(8, 8))
+        plt.scatter(iq.real, iq.imag, s=1, alpha=0.5)
+
+        # Crucial formatting for RF work
+        plt.axhline(0, color='black', lw=1) # X-axis (Real)
+        plt.axvline(0, color='black', lw=1) # Y-axis (Imag)
+        plt.axis('equal')                   # Keep the circle a circle
+        plt.grid(True, linestyle='--')
+        plt.xlabel('In-phase (I)')
+        plt.ylabel('Quadrature (Q)')
+        plt.title('IQ Constellation')
+        plt.show()
+        
+    def plot_histo(self, iq, weight):
+        plt.figure(figsize=(8, 8))
+        
+        # 1. Use a log scale for bins so the 'faint ring' is visible 
+        # even if the 'bright center' is extremely dense.
+        plt.hexbin(iq.real, iq.imag, gridsize=100, cmap='magma', bins='log')
+        
+        plt.axis('equal')
+        plt.colorbar(label='Log10(Sample Density)')
+        plt.grid(alpha=0.3)
+        
+        # 2. Fix the Annotation
+        # We use xycoords='axes fraction' so (0.05, 0.95) is always top-left
+        plt.annotate(f'Quality Weight: {weight:.2f}', 
+                    xy=(0.05, 0.95), 
+                    xycoords='axes fraction',
+                    fontsize=12, 
+                    fontweight='bold',
+                    color='white',
+                    bbox=dict(facecolor='black', alpha=0.5)) # Makes it readable against 'magma'
+
+        plt.title('BANSHEE Density-Based IQ Constellation')
+        plt.xlabel('In-Phase (I)')
+        plt.ylabel('Quadrature (Q)')
+        
+        # Ensure the plot actually pops up
+        plt.draw() 
+        plt.show()
+            
+        

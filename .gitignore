@@ -1,0 +1,16 @@
+# Ignore raw IQ data
+*.bin
+*.iq
+*.cs16
+*.cu8
+*.zip
+*.sc16
+
+# Ignore local sensors/logs
+*.csv
+*.json
+
+# Ignore Python environment and cache
+__pycache__/
+venv/
+.env

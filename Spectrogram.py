@@ -13,7 +13,7 @@ def view_spectrogram(iq, fs, nfft=1024, noverlap=None, cmap='viridis', db_scale=
     f, t, Sxx = spectrogram(iq, fs=fs, window='hann', nperseg=nfft,
                             noverlap=noverlap, return_onesided=False, mode='complex')
 
-    # 2. Shift the frequencies so 0 Hz is in the center
+    # 2. Shift the frequencies so a0 Hz is in the center
     f = np.fft.fftshift(f)
     Sxx = np.fft.fftshift(Sxx, axes=0)
 
